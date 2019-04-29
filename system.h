@@ -160,12 +160,12 @@ private:
 		for(unsigned int i = 0;i < this->secondaryKeyArr.size();i++)
 		{
 			char buffer [200];
-			strcpy(buffer, this->secondaryKeyArr[i].courseInstructorName.c_str());
-			strcat(buffer, "|");
+			strcpy_s(buffer, this->secondaryKeyArr[i].courseInstructorName.c_str());
+			strcat_s(buffer, "|");
 
 			string t = to_string((long long) this->secondaryKeyArr[i].indexList);
-			strcat(buffer, t.c_str());
-			strcat(buffer, "|");
+			strcat_s(buffer, t.c_str());
+			strcat_s(buffer, "|");
 
 			int len = strlen(buffer);
 
@@ -195,7 +195,7 @@ private:
 			int length;
 			while(this->recordsFile.read((char*)&length,sizeof(length)))
 			{
-				int offset = this->recordsFile.tellg();
+				int offset = (int) this->recordsFile.tellg();
 
 				Course obj;
 				obj.courseName = "";
@@ -206,10 +206,7 @@ private:
 				this->recordsFile.read(buffer,length);
 
 				if (buffer[0] == '*')
-				{
-					cout<<"Deleted record !! \n";
 					continue;
-				}
 
 				istringstream stream(buffer);
 
@@ -224,7 +221,7 @@ private:
 
 
 				PrimaryKey temp;
-				strcpy(temp.courseID, obj.courseID);
+				strcpy_s(temp.courseID, obj.courseID);
 				temp.offset = offset - 4;
 				this->primaryKeyArr.push_back(temp);
 
@@ -248,8 +245,6 @@ private:
 	{
 		if(this->statusFlag)
 		{
-			cout<<"error"<<endl;
-			/*
 			this->recordsFile.clear();
 			this->recordsFile.seekp(3, ios::beg);
 
@@ -265,10 +260,7 @@ private:
 				this->recordsFile.read(buffer,length);
 
 				if (buffer[0] == '*')
-				{
-					cout << "deleted record !!" << endl << endl;
 					continue;
-				}
 
 				istringstream stream(buffer);
 
@@ -278,56 +270,52 @@ private:
 				getline(stream, obj.courseName,'|');
 				getline(stream, obj.courseInstructorName,'|');
 				stream.getline(courseWeeksTemp,30,'|');
-				stringstream toShort(courseWeeksTemp);
+				stringstream toShort(courseWeeksTemp); 
 				toShort >> obj.courseWeeks;
 
-				delete [] buffer;
 
-				cout << obj << endl;
-			}
+				SecondaryKey sk;
+				SecondaryKeyList skList;
 
-			this->recordsFile.clear();
-			this->recordsFile.seekg(3, ios::beg); //skip header
+				// Add SecondaryKey to vector
+				int i = secondaryIndexBinarySearch(obj.courseInstructorName);
 
-			char temp;
-			int len;
-
-			while(this->recordsFile.read((char*) &len, sizeof(len)))
-			{
-				this->recordsFile.read(&temp, 1);
-				if(temp == '*')
+				if (i == -1)
 				{
-					this->recordsFile.seekg(len - 1, ios::cur);
+					sk.courseInstructorName = obj.courseInstructorName;
+					sk.indexList = secondaryKeyListArr.size();
+					secondaryKeyArr.push_back(sk);
+
+					strcpy_s(skList.courseID, obj.courseID);
+					skList.next = -1;
+					secondaryKeyListArr.push_back(skList);
 				}
 				else
 				{
-					stringstream stream;
-					SecondaryKey temp;
-					Course s;
+					int indexList = secondaryKeyArr[i].indexList;
 
-					this->recordsFile.seekg(-1,ios::cur);
-					
-					
-					char *buffer = new char[len];
-					
-					this->recordsFile.read(buffer, len);
+					while(true)
+					{
+						if(secondaryKeyListArr[indexList].next == -1)
+						{
+							secondaryKeyListArr[indexList].next = secondaryKeyListArr.size() ;
+							break;
+						}
+						else
+						{
+							indexList = secondaryKeyListArr[indexList].next;
+						}
+					}
 
-					stream.write(buffer, len);
-					stream.getline(s.courseID, 6, '|');
-					getline(stream,s.courseName,'|');
-					getline(stream,s.courseInstructorName,'|');
-					stream.read((char *) &s.courseWeeks,sizeof(s.courseWeeks));
-
-					temp.courseInstructorName = s.courseInstructorName;
-					//temp.offset = s.courseID;
-
-
-					this->secondaryKeyArr.push_back(temp);
-
-					delete [] buffer;
+					strcpy_s(skList.courseID, obj.courseID);
+					skList.next = -1;
+					secondaryKeyListArr.push_back(skList);
 				}
+				
+
+				delete [] buffer;
 			}
-			*/
+			
 		}
 		else
 		{
@@ -357,7 +345,7 @@ private:
 			}
 		}
 
-		sortSecondaryIndices();
+		this->sortSecondaryIndices();
 	}
 
 	void loadSecondaryListIndices()
@@ -410,7 +398,7 @@ private:
 	{
 		this->recordsFile.clear();
 		this->recordsFile.seekg(0, ios::end);
-		int size = this->recordsFile.tellg();
+		int size = (int) this->recordsFile.tellg();
 		return size;
 	}
 
@@ -552,20 +540,20 @@ public:
 		this->recordsFile.clear();
 		this->recordsFile.seekp(0, ios::end);
 
-		int offset = this->recordsFile.tellg();
+		int offset = (int) this->recordsFile.tellg();
 
 		char buffer [200];
-		strcpy(buffer, _c.courseID);
-		strcat(buffer, "|");
-		strcat(buffer, _c.courseName.c_str());
-		strcat(buffer, "|");
-		strcat(buffer, _c.courseInstructorName.c_str());
-		strcat(buffer, "|");
+		strcpy_s(buffer, _c.courseID);
+		strcat_s(buffer, "|");
+		strcat_s(buffer, _c.courseName.c_str());
+		strcat_s(buffer, "|");
+		strcat_s(buffer, _c.courseInstructorName.c_str());
+		strcat_s(buffer, "|");
 
 		string t = to_string((long long) _c.courseWeeks);
 
-		strcat(buffer, t.c_str());
-		strcat(buffer, "|");
+		strcat_s(buffer, t.c_str());
+		strcat_s(buffer, "|");
 
 		int len = strlen(buffer);
 
@@ -574,7 +562,7 @@ public:
 
 		// Add PrimaryKey to vector
 		PrimaryKey temp;
-		strcpy(temp.courseID, _c.courseID);
+		strcpy_s(temp.courseID, _c.courseID);
 		temp.offset = offset;
 		this->primaryKeyArr.push_back(temp);
 		this->sortPrimaryIndices();
@@ -591,7 +579,7 @@ public:
 			sk.indexList = secondaryKeyListArr.size();
 			secondaryKeyArr.push_back(sk);
 
-			strcpy(skList.courseID, _c.courseID);
+			strcpy_s(skList.courseID, _c.courseID);
 			skList.next = -1;
 			secondaryKeyListArr.push_back(skList);
 
@@ -614,7 +602,7 @@ public:
 				}
 			}
 
-			strcpy(skList.courseID, _c.courseID);
+			strcpy_s(skList.courseID, _c.courseID);
 			skList.next = -1;
 			secondaryKeyListArr.push_back(skList);
 		}
