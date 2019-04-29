@@ -1,6 +1,6 @@
 /**
  *  @file    course.h
- *  @author  Mahmoud Ahmed Tawfik (20160227)
+ *  @author  Mahmoud Ahmed Tawfik(20160227)
  *  @date    14/04/2019
  *  @version 1.0
  *
@@ -38,7 +38,7 @@ public:
 
 	friend istream& operator >>(istream &_in, Course &_course)
 	{
-		cout << "Enter COURSE ID: ";		       _in.getline(_course.courseID, 6, '\n');
+		cout << "Enter COURSE ID: ";		       _in >> _course.courseID; _in.ignore();
 		cout << "Enter COURSE NAME: ";		       getline(cin, _course.courseName);
 		cout << "Enter COURSE INSTRUCTOR NAME: ";  getline(cin, _course.courseInstructorName);
 		cout << "Enter COURSE WEEKS: "; 		   _in >> _course.courseWeeks;

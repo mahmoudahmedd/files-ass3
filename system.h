@@ -25,43 +25,53 @@ using namespace std;
 class System
 {
 private:
-	struct PrimaryIndexRecord
+	struct PrimaryKey
 	{
-		char PK[6];
-		int offset;
+		char courseID[6];
+		int  offset;
 	};
 
-	struct SecondaryIndexRecord
+	struct SecondaryKey
 	{
 		string courseInstructorName;
-		int offset;
+		int indexList;
+	};
+
+	struct SecondaryKeyList
+	{
+		char courseID[6];
+		int  next;
 	};
 
 	fstream recordsFile;
 	fstream primaryKeysFile;
 	fstream secondaryKeysFile;
-	fstream secondaryAvilListFile;
+	fstream secondaryKeysListFile;
+
 	string recordsFileName;
 	string primaryKeysFileName;
 	string secondaryKeysFileName;
 	string secondaryAvilList;
-	vector<PrimaryIndexRecord> primaryIndexArr;
-	vector<SecondaryIndexRecord> secondaryIndexArr;
+
+	vector<PrimaryKey>       primaryKeyArr;
+	vector<SecondaryKey>     secondaryKeyArr;
+	vector<SecondaryKeyList> secondaryKeyListArr;
+
 	bool statusFlag;
 	bool state;
 	short RRN;
 	
 	int primaryIndexBinarySearch(char *key)
 	{
-		int low = 0, high = primaryIndexArr.size() - 1;
+		int low = 0, high = primaryKeyArr.size() - 1;
 
 		while (low <= high)
 		{
 			int middle = (low + high) / 2;
 
-			if (strcmp(primaryIndexArr[middle].PK, key) == 0)
+			if (strcmp(primaryKeyArr[middle].courseID, key) == 0)
 				return middle;
-			else if (atoi(primaryIndexArr[middle].PK) < atoi(key))
+			else if (atoi(primaryKeyArr[middle].courseID) < atoi(key))
 				low = middle + 1;
 			else
 				high = middle - 1;
@@ -71,15 +81,15 @@ private:
 
 	int secondaryIndexBinarySearch(string _courseInstructorName)
 	{
-		int low = 0, high = secondaryIndexArr.size() - 1;
+		int low = 0, high = secondaryKeyArr.size() - 1;
 
 		while (low <= high)
 		{
 			int middle = (low + high) / 2;
 
-			if (secondaryIndexArr[middle].courseInstructorName == _courseInstructorName)
+			if (secondaryKeyArr[middle].courseInstructorName == _courseInstructorName)
 				return middle;
-			else if (secondaryIndexArr[middle].courseInstructorName < _courseInstructorName)
+			else if (secondaryKeyArr[middle].courseInstructorName < _courseInstructorName)
 				low = middle + 1;
 			else
 				high = middle - 1;
@@ -113,18 +123,18 @@ private:
 
 	void sortPrimaryIndices()
 	{
-		sort(this->primaryIndexArr.begin(), this->primaryIndexArr.end(), 
-			[](PrimaryIndexRecord _a, PrimaryIndexRecord _b) 
+		sort(this->primaryKeyArr.begin(), this->primaryKeyArr.end(), 
+			[](PrimaryKey _a, PrimaryKey _b) 
 			{
-				return strcmp(_a.PK,_b.PK) != 1 ;
+				return strcmp(_a.courseID,_b.courseID) == -1 ;
 			}
 		);
 	}
 
 	void sortSecondaryIndices()
 	{
-		sort(this->secondaryIndexArr.begin(), this->secondaryIndexArr.end(), 
-			[](SecondaryIndexRecord _a, SecondaryIndexRecord _b) 
+		sort(this->secondaryKeyArr.begin(), this->secondaryKeyArr.end(), 
+			[](SecondaryKey _a, SecondaryKey _b) 
 			{
 				return _a.courseInstructorName < _b.courseInstructorName;
 			}
@@ -136,10 +146,9 @@ private:
 		this->primaryKeysFile.clear();
 		this->primaryKeysFile.seekp(0, ios::beg);
 
-		for(unsigned int i = 0;i < this->primaryIndexArr.size();i++)
+		for(unsigned int i = 0;i < this->primaryKeyArr.size();i++)
 		{
-			cout<<this->primaryIndexArr[i].PK<< " "<< this->primaryIndexArr[i].offset<<endl;
-			this->primaryKeysFile.write((char*) & this->primaryIndexArr[i], sizeof(this->primaryIndexArr[i]));
+			this->primaryKeysFile.write((char*) & this->primaryKeyArr[i], sizeof(this->primaryKeyArr[i]));
 		}
 	}
 
@@ -148,65 +157,88 @@ private:
 		this->secondaryKeysFile.clear();
 		this->secondaryKeysFile.seekp(0, ios::beg);
 
-		for(unsigned int i = 0;i < this->secondaryIndexArr.size();i++)
+		for(unsigned int i = 0;i < this->secondaryKeyArr.size();i++)
 		{
-			cout<<this->secondaryIndexArr[i].courseInstructorName<<" "<< this->secondaryIndexArr[i].offset<<endl;
-			this->secondaryKeysFile.write((char*) & this->secondaryIndexArr[i], sizeof(this->secondaryIndexArr[i]));
+			char buffer [200];
+			strcpy(buffer, this->secondaryKeyArr[i].courseInstructorName.c_str());
+			strcat(buffer, "|");
+
+			string t = to_string((long long) this->secondaryKeyArr[i].indexList);
+			strcat(buffer, t.c_str());
+			strcat(buffer, "|");
+
+			int len = strlen(buffer);
+
+			this->secondaryKeysFile.write((char*) &len, sizeof(int));
+			this->secondaryKeysFile.write((char*) &buffer, len);
+		}
+	}
+
+	void saveSecondaryListIndices()
+	{
+		this->secondaryKeysListFile.clear();
+		this->secondaryKeysListFile.seekp(0, ios::beg);
+
+		for(unsigned int i = 0;i < this->secondaryKeyListArr.size();i++)
+		{
+			this->secondaryKeysListFile.write((char*) & this->secondaryKeyListArr[i], sizeof(this->secondaryKeyListArr[i]));
 		}
 	}
 
 	void loadPrimaryIndices()
 	{
-		if(this->statusFlag && getFileSize() != 3)
+		if(this->statusFlag)
 		{
 			this->recordsFile.clear();
-			this->recordsFile.seekg(3, ios::beg); //skip header
+			this->recordsFile.seekp(3, ios::beg);
 
-			char temp;
-			int len;
-
-			while(this->recordsFile.read((char*) &len, sizeof(len)))
+			int length;
+			while(this->recordsFile.read((char*)&length,sizeof(length)))
 			{
-				this->recordsFile.read(&temp, 1);
-				if(temp == '*')
+				int offset = this->recordsFile.tellg();
+
+				Course obj;
+				obj.courseName = "";
+				obj.courseInstructorName = "";
+
+				char *buffer;
+				buffer = new char[length];
+				this->recordsFile.read(buffer,length);
+
+				if (buffer[0] == '*')
 				{
-					this->recordsFile.seekg(len - 1, ios::cur);
+					cout<<"Deleted record !! \n";
+					continue;
 				}
-				else
-				{
-					stringstream stream;
-					PrimaryIndexRecord temp;
-					Course s;
 
-					this->recordsFile.seekg(-1,ios::cur);
-					int offset = this->recordsFile.tellg();
-					
-					char *buffer = new char[len];
-					
-					this->recordsFile.read(buffer, len);
+				istringstream stream(buffer);
 
-					stream.write(buffer, len);
-					stream.getline(s.courseID, 6, '|');
-					getline(stream,s.courseName,'|');
-					getline(stream,s.courseInstructorName,'|');
-					stream.read((char *) &s.courseWeeks,sizeof(s.courseWeeks));
+				char courseWeeksTemp[30];
 
-					strcpy(temp.PK, s.courseID);
-					temp.offset = offset - 4;
-					this->primaryIndexArr.push_back(temp);
+				stream.getline(obj.courseID, 6, '|');
+				getline(stream, obj.courseName,'|');
+				getline(stream, obj.courseInstructorName,'|');
+				stream.getline(courseWeeksTemp,30,'|');
+				stringstream toShort(courseWeeksTemp); 
+				toShort >> obj.courseWeeks;
 
-					delete [] buffer;
-				}
+
+				PrimaryKey temp;
+				strcpy(temp.courseID, obj.courseID);
+				temp.offset = offset - 4;
+				this->primaryKeyArr.push_back(temp);
+
+				delete [] buffer;
 			}
 		}
 		else
 		{
-			PrimaryIndexRecord temp;
+			PrimaryKey temp;
 			this->primaryKeysFile.clear();
 			this->primaryKeysFile.seekg(0, ios::beg);
 
 			while(this->primaryKeysFile.read((char*) &temp, sizeof(temp)))
-				this->primaryIndexArr.push_back(temp);
+				this->primaryKeyArr.push_back(temp);
 		}
 
 		sortPrimaryIndices();
@@ -214,8 +246,46 @@ private:
 
 	void loadSecondaryIndices()
 	{
-		if(this->statusFlag && getFileSize() != 3)
+		if(this->statusFlag)
 		{
+			cout<<"error"<<endl;
+			/*
+			this->recordsFile.clear();
+			this->recordsFile.seekp(3, ios::beg);
+
+			int length;
+			while(this->recordsFile.read((char*)&length,sizeof(length)))
+			{
+				Course obj;
+				obj.courseName = "";
+				obj.courseInstructorName = "";
+
+				char *buffer;
+				buffer = new char[length];
+				this->recordsFile.read(buffer,length);
+
+				if (buffer[0] == '*')
+				{
+					cout << "deleted record !!" << endl << endl;
+					continue;
+				}
+
+				istringstream stream(buffer);
+
+				char courseWeeksTemp[30];
+
+				stream.getline(obj.courseID, 6, '|');
+				getline(stream, obj.courseName,'|');
+				getline(stream, obj.courseInstructorName,'|');
+				stream.getline(courseWeeksTemp,30,'|');
+				stringstream toShort(courseWeeksTemp);
+				toShort >> obj.courseWeeks;
+
+				delete [] buffer;
+
+				cout << obj << endl;
+			}
+
 			this->recordsFile.clear();
 			this->recordsFile.seekg(3, ios::beg); //skip header
 
@@ -232,7 +302,7 @@ private:
 				else
 				{
 					stringstream stream;
-					SecondaryIndexRecord temp;
+					SecondaryKey temp;
 					Course s;
 
 					this->recordsFile.seekg(-1,ios::cur);
@@ -252,23 +322,53 @@ private:
 					//temp.offset = s.courseID;
 
 
-					this->secondaryIndexArr.push_back(temp);
+					this->secondaryKeyArr.push_back(temp);
 
 					delete [] buffer;
 				}
 			}
+			*/
 		}
 		else
 		{
-			SecondaryIndexRecord temp;
 			this->secondaryKeysFile.clear();
 			this->secondaryKeysFile.seekg(0, ios::beg);
 
-			while(this->secondaryKeysFile.read((char*) &temp, sizeof(temp)))
-				this->secondaryIndexArr.push_back(temp);
+			int length;
+			while(this->secondaryKeysFile.read((char*)&length, sizeof(length)))
+			{
+				SecondaryKey temp;
+				temp.courseInstructorName = "";
+
+				char *buffer;
+				buffer = new char[length];
+				this->secondaryKeysFile.read(buffer, length);
+				istringstream stream(buffer);
+
+				char offsetListTemp[30];
+
+				getline(stream, temp.courseInstructorName, '|');
+				stream.getline(offsetListTemp,30,'|');
+
+				stringstream toInt(offsetListTemp);
+				toInt >> temp.indexList;
+
+				this->secondaryKeyArr.push_back(temp);
+			}
 		}
 
 		sortSecondaryIndices();
+	}
+
+	void loadSecondaryListIndices()
+	{
+		SecondaryKeyList temp;
+
+		this->secondaryKeysListFile.clear();
+		this->secondaryKeysListFile.seekg(0, ios::beg);
+
+		while(this->secondaryKeysListFile.read((char*) &temp, sizeof(temp)))
+			this->secondaryKeyListArr.push_back(temp);
 	}
 
 	void setRRN(short _x)
@@ -323,15 +423,15 @@ private:
 public:
 	System(string _recordsFileName, string _primaryKeysFileName, string _secondaryKeysFileName, string _secondaryAvilList)
 	{
-		this->recordsFile.open(_recordsFileName.c_str(), ios::in | ios::out);
-		this->primaryKeysFile.open(_primaryKeysFileName.c_str(), ios::in | ios::out);
-		this->secondaryKeysFile.open(_secondaryKeysFileName.c_str(), ios::in | ios::out);
-		this->secondaryAvilListFile.open(_secondaryAvilList.c_str(), ios::in | ios::out);
+		this->recordsFile.open(_recordsFileName.c_str(), ios::in | ios::out | ios::binary);
+		this->primaryKeysFile.open(_primaryKeysFileName.c_str(), ios::in | ios::out | ios::binary);
+		this->secondaryKeysFile.open(_secondaryKeysFileName.c_str(), ios::in | ios::out | ios::binary);
+		this->secondaryKeysListFile.open(_secondaryAvilList.c_str(), ios::in | ios::out | ios::binary);
 
-		this->recordsFileName = _recordsFileName;
-		this->primaryKeysFileName = _primaryKeysFileName;
+		this->recordsFileName       = _recordsFileName;
+		this->primaryKeysFileName   = _primaryKeysFileName;
 		this->secondaryKeysFileName = _secondaryKeysFileName;
-		this->secondaryAvilList = _secondaryAvilList;
+		this->secondaryAvilList     = _secondaryAvilList;
 
 		if(!this->recordsFile)
 		{
@@ -351,7 +451,7 @@ public:
 			exit(EXIT_FAILURE);
 		}
 
-		if(!this->secondaryAvilListFile)
+		if(!this->secondaryKeysListFile)
 		{
 			cerr << "System::System(string): ERROR - "<< this->secondaryAvilList <<" Not Found."  << endl;
 			exit(EXIT_FAILURE);
@@ -367,523 +467,326 @@ public:
 		else
 		{
 			this->statusFlag = this->getStatusFlag();
-			this->RRN = this->getRRN();
+			this->RRN        = this->getRRN();
+
+			// keys into vectors
 			this->loadPrimaryIndices();
 			this->loadSecondaryIndices();
+			this->loadSecondaryListIndices();
+
 			this->statusFlag = true;
 		}
 		
 		this->state = true;
 
-		cout << "Status Flag = " << this->statusFlag << endl;
-		cout << "RRN = " << this->RRN << endl;
+		cout << "Status Flag = "  << this->statusFlag << endl << endl << endl;
+	}
+
+	void printAll()
+	{
+		this->recordsFile.clear();
+		this->recordsFile.seekp(3, ios::beg);
+
+		int length;
+		while(this->recordsFile.read((char*)&length,sizeof(length)))
+		{
+			Course obj;
+			obj.courseName = "";
+			obj.courseInstructorName = "";
+
+			char *buffer;
+			buffer = new char[length];
+			this->recordsFile.read(buffer,length);
+
+			if (buffer[0] == '*')
+			{
+				cout << "deleted record !!" << endl << endl;
+				continue;
+			}
+
+			istringstream stream(buffer);
+
+			char courseWeeksTemp[30];
+
+			stream.getline(obj.courseID, 6, '|');
+			getline(stream, obj.courseName,'|');
+			getline(stream, obj.courseInstructorName,'|');
+			stream.getline(courseWeeksTemp,30,'|');
+			stringstream toShort(courseWeeksTemp); 
+			toShort >> obj.courseWeeks;
+
+			delete [] buffer;
+
+			cout << obj << endl;
+		}
+	}
+
+	void printKeys()
+	{
+		cout << "------------------primaryKey-----------------------" << endl;
+
+		for(unsigned int i = 0;i < this->primaryKeyArr.size();i++)
+		{
+			cout << this->primaryKeyArr[i].courseID << " " << this->primaryKeyArr[i].offset << endl;
+		}
+
+		cout << "------------------secondaryKey---------------------" << endl;
+
+		for(unsigned int i = 0;i < this->secondaryKeyArr.size();i++)
+		{
+			cout << this->secondaryKeyArr[i].courseInstructorName << " " << this->secondaryKeyArr[i].indexList << endl;
+		}
+
+		cout << "-----------------secondaryKeyListArr---------------" << endl;
+
+		for(unsigned int i = 0;i < this->secondaryKeyListArr.size();i++)
+		{
+			cout << this->secondaryKeyListArr[i].courseID << " " << this->secondaryKeyListArr[i].next << endl;
+		}
 	}
 
 	void addNewCourse(Course _c)
 	{
+		//this->recordsFile.close();
+
 		this->recordsFile.clear();
 		this->recordsFile.seekp(0, ios::end);
 
-		this->secondaryAvilListFile.clear();
-		this->secondaryAvilListFile.seekp(0, ios::end);
+		int offset = this->recordsFile.tellg();
 
-		int offset = this->secondaryAvilListFile.tellp();
-		int addess = this->recordsFile.tellp();
+		char buffer [200];
+		strcpy(buffer, _c.courseID);
+		strcat(buffer, "|");
+		strcat(buffer, _c.courseName.c_str());
+		strcat(buffer, "|");
+		strcat(buffer, _c.courseInstructorName.c_str());
+		strcat(buffer, "|");
 
-		this->writeCourse(_c);
+		string t = to_string((long long) _c.courseWeeks);
 
-		PrimaryIndexRecord temp1;
-		strcpy(temp1.PK, _c.courseID);
-		temp1.offset = addess;
-		primaryIndexArr.push_back(temp1);
-		sortPrimaryIndices();
+		strcat(buffer, t.c_str());
+		strcat(buffer, "|");
 
-		int address = this->secondaryIndexBinarySearch(_c.courseInstructorName);
+		int len = strlen(buffer);
 
-		if (address == -1)
+		this->recordsFile.write((char*) &len, sizeof(int));
+		this->recordsFile.write((char*) &buffer, len);
+
+		// Add PrimaryKey to vector
+		PrimaryKey temp;
+		strcpy(temp.courseID, _c.courseID);
+		temp.offset = offset;
+		this->primaryKeyArr.push_back(temp);
+		this->sortPrimaryIndices();
+
+		// Add SecondaryKey to vector
+		int i = secondaryIndexBinarySearch(_c.courseInstructorName);
+
+		SecondaryKey sk;
+		SecondaryKeyList skList;
+
+		if (i == -1)
 		{
-			SecondaryIndexRecord temp2;
-			temp2.courseInstructorName = _c.courseInstructorName;
-			temp2.offset = offset;
-		
-			secondaryIndexArr.push_back(temp2);
+			sk.courseInstructorName = _c.courseInstructorName;
+			sk.indexList = secondaryKeyListArr.size();
+			secondaryKeyArr.push_back(sk);
+
+			strcpy(skList.courseID, _c.courseID);
+			skList.next = -1;
+			secondaryKeyListArr.push_back(skList);
+
+			this->sortSecondaryIndices();
 		}
-		
-		
-		sortSecondaryIndices();
+		else
+		{
+			int indexList = secondaryKeyArr[i].indexList;
+
+			while(true)
+			{
+				if(secondaryKeyListArr[indexList].next == -1)
+				{
+					secondaryKeyListArr[indexList].next = secondaryKeyListArr.size() ;
+					break;
+				}
+				else
+				{
+					indexList = secondaryKeyListArr[indexList].next;
+				}
+			}
+
+			strcpy(skList.courseID, _c.courseID);
+			skList.next = -1;
+			secondaryKeyListArr.push_back(skList);
+		}
 	}
 
-	void deleteCourseID()
+	bool deleteCourseID(char *PK)
 	{
-		char PK[6]; 
-		cout << "Enter PK to delete: ";  cin.getline(PK,6);
+		int index = this->primaryIndexBinarySearch(PK);
 
-		int address = this->primaryIndexBinarySearch(PK);
+		if (index == -1)
+			return false;
 
-		if (address == -1)
-		{
-			cout << "Course not found.\n";
-			return;
-		}
-
+		// delete from file
 		this->recordsFile.clear();
-		this->recordsFile.seekp(primaryIndexArr[address].offset + 4, ios::beg);
+		this->recordsFile.seekp(primaryKeyArr[index].offset + 4, ios::beg); // skip len
 		this->recordsFile.write((char *) &"*",1);
 
-		primaryIndexArr.erase(primaryIndexArr.begin() + address);
+		// delete from vector
+		primaryKeyArr.erase(primaryKeyArr.begin() + index);
+
+		return true;
 	}
 
-	void printCourseID()
-	{
-		this->recordsFile.close();
-		this->recordsFile.open(this->recordsFileName.c_str(), ios::in | ios::out);
-
-		this->recordsFile.clear();
-		this->recordsFile.seekg(3, ios::beg); //skip header
-
-		char PK[6]; 
-		
-		cout << "Enter Course ID: ";  cin >> PK;
-
-		int address = this->primaryIndexBinarySearch(PK);
-
-		if (address == -1)
-		{
-			cout << "Course not found.\n";
-			return;
-		}
-
-		stringstream stream;
-		Course s;
-		int len;
-
-		this->recordsFile.seekp(primaryIndexArr[address].offset, ios::beg);
-		this->recordsFile.read((char*) &len, sizeof(len));
-
-		char *buffer = new char[len];
-					
-		this->recordsFile.read(buffer, len);
-
-		stream.write(buffer, len);
-		stream.getline(s.courseID, 6, '|');
-		getline(stream,s.courseName,'|');
-		getline(stream,s.courseInstructorName,'|');
-		stream.read((char *) &s.courseWeeks,sizeof(s.courseWeeks));
-
-		cout << s << endl;
-
-		delete [] buffer;
-	}
-
-	void updateCourseID()
-	{
-		this->recordsFile.close();
-		this->recordsFile.open(this->recordsFileName.c_str(), ios::in | ios::out);
-
-		this->recordsFile.clear();
-		this->recordsFile.seekg(3, ios::beg); //skip header
-
-		char PK[6]; 
-		
-		cout << "Enter PK to delete: ";  cin >> PK;
-
-		int address = this->primaryIndexBinarySearch(PK);
-
-		if (address == -1)
-		{
-			cout << "Course not found.\n";
-			return;
-		}
-
-		stringstream stream;
-		Course s;
-		int len;
-
-		this->recordsFile.seekp(primaryIndexArr[address].offset, ios::beg);
-		this->recordsFile.read((char*) &len, sizeof(len));
-
-		char *buffer = new char[len];
-					
-		this->recordsFile.read(buffer, len);
-
-		stream.write(buffer, len);
-		stream.getline(s.courseID, 6, '|');
-		getline(stream,s.courseName,'|');
-		getline(stream,s.courseInstructorName,'|');
-		stream.read((char *) &s.courseWeeks,sizeof(s.courseWeeks));
-
-		cin >> s;
-
-		cout << s << endl;
-
-		this->recordsFile.seekp(primaryIndexArr[address].offset, ios::beg);
-
-		delete [] buffer;
-	}
-
-	void deleteCourseName()
+	void deleteInstructorName()
 	{
 		string name; 
-		cout << "Enter PK to Name: ";  cin>>name;
+		cout << "Enter name to Name: ";  cin >> name;
 
-		int address = this->secondaryIndexBinarySearch(name);
+		int index = this->secondaryIndexBinarySearch(name);
 
-		if (address == -1)
+		if (index == -1)
+		{
+			cout << "Course not found.\n";
+			return;
+		}
+
+		int indexList = secondaryKeyArr[index].indexList;
+
+		while(true)
+		{
+			if(secondaryKeyListArr[indexList].next == -1)
+			{
+				deleteCourseID(secondaryKeyListArr[indexList].courseID);
+
+				break;
+			}
+			else
+			{
+				deleteCourseID(secondaryKeyListArr[indexList].courseID);
+				indexList = secondaryKeyListArr[indexList].next;
+			}
+		}
+		
+		// delete from vector
+		secondaryKeyArr.erase(secondaryKeyArr.begin() + index);
+	}
+
+	void printCourseID(char *PK)
+	{
+		Course obj;
+		obj.courseName = "";
+		obj.courseInstructorName = "";
+
+		int index = this->primaryIndexBinarySearch(PK);
+
+		if (index == -1)
 		{
 			cout << "Course not found.\n";
 			return;
 		}
 
 		this->recordsFile.clear();
-		this->recordsFile.seekp(secondaryIndexArr[address].offset + 4, ios::beg);
-		this->recordsFile.write((char *) &"*",1);
+		this->recordsFile.seekg(primaryKeyArr[index].offset, ios::beg);
 
-		secondaryIndexArr.erase(secondaryIndexArr.begin() + address);
+		int length;
+		this->recordsFile.read((char *) &length, sizeof(length));
+
+		char *buffer;
+		buffer = new char[length];
+		this->recordsFile.read(buffer,length);
+
+		istringstream stream(buffer);
+
+		char courseWeeksTemp[30];
+
+		stream.getline(obj.courseID, 6, '|');
+		getline(stream, obj.courseName,'|');
+		getline(stream, obj.courseInstructorName,'|');
+		stream.getline(courseWeeksTemp,30,'|');
+		stringstream toShort(courseWeeksTemp); 
+		toShort >> obj.courseWeeks;
+
+		cout << obj << endl;
+
+		delete [] buffer;
 	}
 
 	void printCourseName()
 	{
-		this->recordsFile.close();
-		this->recordsFile.open(this->recordsFileName.c_str(), ios::in | ios::out);
+		string name; 
+		cout << "Enter name to print: ";  cin >> name;
 
-		this->recordsFile.clear();
-		this->recordsFile.seekg(3, ios::beg); //skip header
+		int index = this->secondaryIndexBinarySearch(name);
 
-		char PK[6]; 
-		
-		cout << "Enter Course ID: ";  cin >> PK;
-
-		int address = this->primaryIndexBinarySearch(PK);
-
-		if (address == -1)
+		if (index == -1)
 		{
 			cout << "Course not found.\n";
 			return;
 		}
 
-		stringstream stream;
-		Course s;
-		int len;
+		int indexList = secondaryKeyArr[index].indexList;
 
-		this->recordsFile.seekp(primaryIndexArr[address].offset, ios::beg);
-		this->recordsFile.read((char*) &len, sizeof(len));
+		while(true)
+		{
+			if(secondaryKeyListArr[indexList].next == -1)
+			{
+				printCourseID(secondaryKeyListArr[indexList].courseID);
+				break;
+			}
+			else
+			{
+				printCourseID(secondaryKeyListArr[indexList].courseID);
+				indexList = secondaryKeyListArr[indexList].next;
+			}
+		}
+	}
 
-		char *buffer = new char[len];
-					
-		this->recordsFile.read(buffer, len);
+	bool updateCourseID(char *PK)
+	{
+		if(!deleteCourseID(PK))
+			return false;
 
-		stream.write(buffer, len);
-		stream.getline(s.courseID, 6, '|');
-		getline(stream,s.courseName,'|');
-		getline(stream,s.courseInstructorName,'|');
-		stream.read((char *) &s.courseWeeks,sizeof(s.courseWeeks));
-
-		cout << s << endl;
-
-		delete [] buffer;
+		Course c;
+		cin >> c;
+		addNewCourse(c);
+		
+		return true;
 	}
 
 	void updateCourseName()
 	{
-		this->recordsFile.close();
-		this->recordsFile.open(this->recordsFileName.c_str(), ios::in | ios::out);
+		string name; 
+		cout << "Enter name to update: ";  cin >> name;
 
-		this->recordsFile.clear();
-		this->recordsFile.seekg(3, ios::beg); //skip header
+		int index = this->secondaryIndexBinarySearch(name);
 
-		char PK[6]; 
-		
-		cout << "Enter PK to delete: ";  cin >> PK;
-
-		int address = this->primaryIndexBinarySearch(PK);
-
-		if (address == -1)
+		if (index == -1)
 		{
 			cout << "Course not found.\n";
 			return;
 		}
 
-		stringstream stream;
-		Course s;
-		int len;
+		int indexList = secondaryKeyArr[index].indexList;
 
-		this->recordsFile.seekp(primaryIndexArr[address].offset, ios::beg);
-		this->recordsFile.read((char*) &len, sizeof(len));
-
-		char *buffer = new char[len];
-					
-		this->recordsFile.read(buffer, len);
-
-		stream.write(buffer, len);
-		stream.getline(s.courseID, 6, '|');
-		getline(stream,s.courseName,'|');
-		getline(stream,s.courseInstructorName,'|');
-		stream.read((char *) &s.courseWeeks,sizeof(s.courseWeeks));
-
-		cin >> s;
-
-		cout << s << endl;
-
-		this->recordsFile.seekp(primaryIndexArr[address].offset, ios::beg);
-
-		delete [] buffer;
-	}
-
-	/*
-	void updateBook(char *_isbn)
-	{
-		Book b;
-		Book newBook;
-		bool flag = false;
-		char temp, delimiter;
-
-		file.clear();
-		file.seekg(2, ios::beg);
-
-		while(file.read(&temp, 1))
+		while(true)
 		{
-			if(temp == '*')
+			if(secondaryKeyListArr[indexList].next == -1)
 			{
-				file.seekp(-1, ios::cur);
-				file.seekg(127, ios::cur);
-			}
-			else
-			{
-				file.seekg(-1, ios::cur);
-				
-				file.read((char *)& b.isbn, sizeof(b.isbn));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.title, sizeof(b.title));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.authorName, sizeof(b.authorName));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.price, sizeof(b.price));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.year, sizeof(b.year));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.numOfPages, sizeof(b.numOfPages));
-				file.read(&delimiter, 1);
-
-				if(strcmp(b.isbn, _isbn) == 0)
-				{
-					flag = true;
-					cin >> newBook;
-					
-					file.seekg(-127, ios::cur);
-					writeBook(newBook);
-
-					break;
-				}
-
-				if(flag)
-					cout << newBook << endl;
-			}
-		}
-
-		if(!flag)
-			cout << endl << "NOT FOUND." << endl << endl;
-	} 
-
-	void deleteBook(char * s)
-	{
-		Book b;
-		char d;
-
-		file.clear();
-		file.seekg(2);
-		
-		while(file.read((char *)& b.isbn, sizeof(b.isbn)))
-		{
-			if(strcmp(b.isbn, s) == 0)
-			{
-				file.seekp(-5, ios::cur);
-				short temp = this->RRN;
-				this->RRN = file.tellp() ;
-
-				file.write("*", 1);
-				file.write((char *)& temp, sizeof(temp));
-
-				setRRN(this->RRN);
-
+				updateCourseID(secondaryKeyListArr[indexList].courseID);
 				break;
 			}
-
-			file.read(&d, 1);
-			file.read((char *)& b.title, sizeof(b.title));
-			file.read(&d, 1);
-			file.read((char *)& b.authorName, sizeof(b.authorName));
-			file.read(&d, 1);
-			file.read((char *)& b.price, sizeof(b.price));
-			file.read(&d, 1);
-			file.read((char *)& b.year,sizeof(b.year));
-			file.read(&d, 1);
-			file.read((char *)& b.numOfPages,sizeof(b.numOfPages));
-			file.read(&d, 1);
-		}
-	}
-
-	void printBook(char *_cArr, bool _isTitle)
-	{
-		Book b;
-		bool flag = false;
-		char temp, delimiter;
-
-		file.clear();
-		file.seekg(2, ios::beg);
-
-		while(file.read(&temp, 1))
-		{
-			if(temp == '*')
-			{
-				file.seekp(-1, ios::cur);
-				file.seekg(127, ios::cur);  // 6 + 121
-			}
 			else
 			{
-				file.seekg(-1,ios::cur);
-				
-				file.read((char *)& b.isbn, sizeof(b.isbn));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.title, sizeof(b.title));
-
-				if(_isTitle)
-				{
-					if(strcmp(b.title, _cArr) == 0)
-						flag = true;
-				}
-				else
-				{
-					if(strcmp(b.isbn, _cArr) == 0)
-						flag = true;
-				}
-
-				file.read(&delimiter, 1);
-				file.read((char *)& b.authorName, sizeof(b.authorName));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.price, sizeof(b.price));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.year, sizeof(b.year));
-				file.read(&delimiter, 1);
-				file.read((char *)& b.numOfPages, sizeof(b.numOfPages));
-				file.read(&delimiter, 1);
-
-				if(flag)
-					cout << b << endl;
+				updateCourseID(secondaryKeyListArr[indexList].courseID);
+				indexList = secondaryKeyListArr[indexList].next;
 			}
 		}
-
-		if(!flag)
-			cout << endl << "NOT FOUND." << endl << endl;
-	} 
-
-	void printAll()
-	{
-		Book b;
-		file.clear();
-		file.seekg(2, ios::beg);
-	
-		char ax;
-
-		while(file.read(&ax, 1))
-		{
-			char d;
-			
-			if(ax == '*')
-			{
-				file.seekp(-1, ios::cur);
-				file.seekg(127, ios::cur);  // 6 + 121
-			}
-			else
-			{
-				file.seekg(-1,ios::cur);
-	
-				file.read((char *)& b.isbn, sizeof(b.isbn));
-				file.read(&d, 1);
-				file.read((char *)& b.title, sizeof(b.title));
-				file.read(&d, 1);
-				file.read((char *)& b.authorName, sizeof(b.authorName));
-				file.read(&d, 1);
-				file.read((char *)& b.price, sizeof(b.price));
-				file.read(&d, 1);
-				file.read((char *)& b.year, sizeof(b.year));
-				file.read(&d, 1);
-				file.read((char *)& b.numOfPages, sizeof(b.numOfPages));
-				file.read(&d, 1);
-				cout << b << endl;
-			}
-		}
-	} 
-
-	void compactTheFile()
-	{
-		vector<Book> books;
-		Book b;
-		char temp;
-
-		file.clear();
-		file.seekg(2, ios::beg);
-
-		while(file.read(&temp, 1))
-		{
-			char d;
-			
-			if(temp == '*')
-			{
-				file.seekp(-1, ios::cur);
-				file.seekg(127, ios::cur);  // 6 + 121
-			}
-			else
-			{
-				file.seekg(-1,ios::cur);
-	
-				file.read((char *)& b.isbn, sizeof(b.isbn));
-				file.read(&d, 1);
-				file.read((char *)& b.title, sizeof(b.title));
-				file.read(&d, 1);
-				file.read((char *)& b.authorName, sizeof(b.authorName));
-				file.read(&d, 1);
-				file.read((char *)& b.price, sizeof(b.price));
-				file.read(&d, 1);
-				file.read((char *)& b.year, sizeof(b.year));
-				file.read(&d, 1);
-				file.read((char *)& b.numOfPages, sizeof(b.numOfPages));
-				file.read(&d, 1);
-				
-				books.push_back(b);
-			}
-		}
-
-		trunc();
-		RRN = -1;
-
-		file.clear();
-		file.seekp(0, ios::beg);
-		file.write((char *)& this->RRN, sizeof(this->RRN));
 		
-
-		for(unsigned  int i = 0 ; i < books.size() ; i++)
-			writeBook(books[i]);
+		// delete from vector
+		secondaryKeyArr.erase(secondaryKeyArr.begin() + index);
 	}
 
-	
-
-	void setRRN(short x = -1)
-	{
-		file.seekp(0, ios::beg);
-		file.write((char *)& x, sizeof(x));
-
-		getRRN();
-	}
-
-	int getRRN()
-	{
-		file.clear();
-		file.seekg(0, ios::beg);
-		file.read((char *)& this->RRN, sizeof(this->RRN));
-
-		return RRN;
-	}
-	*/
 	bool isOpen()
 	{
 		return this->state;
@@ -898,9 +801,9 @@ public:
 				"5) Print course (instructor  name)\n"
 				"6) update course (ID)\n"
 				"7) update course (instructor  name)\n"
-				"8) Exit\n\n\n";
-
-		cout << "RRN = " << this->RRN << endl << endl;
+				"8) Print keys\n"
+				"9) Print all\n"
+				"0) Exit\n\n\n";
 
 		cout << "Please Enter Your Choice: ";
 	}
@@ -924,26 +827,46 @@ public:
 	{
 		switch(_choice)
 		{
+			case '0':
+			{
+				this->state = false;
+				break;
+			}
 			case '1':
 			{
-				Course c;
-				cin>>c;
-				this->addNewCourse(c);
+				Course c1("1111", "Mahmoud Ahmed", "fci sadsa sas", 5);
+				//Course c2("1112", "Hemai", "adf asa sd", 2000);
+				cin>>c1;
+				this->addNewCourse(c1);
+				//this->addNewCourse(c2);
 				break;
 			}
 			case '2':
 			{
-				this->deleteCourseID();
+				char PK[6]; 
+				cout << "Enter PK to delete: ";  cin >> PK;
+
+				if (this->deleteCourseID(PK))
+				{
+					cout << "DONE!\n";	
+				}
+				else
+				{
+					cout << "Course not found.\n";	
+				}
+				
 				break;
 			}
 			case '3':
 			{
-				this->deleteCourseName();
+				this->deleteInstructorName();
 				break;
 			}
 			case '4':
 			{
-				this->printCourseID();
+				char PK[6]; 
+				cout << "Enter PK to print: ";  cin >> PK;
+				this->printCourseID(PK);
 				break;
 			}
 			case '5':
@@ -953,7 +876,14 @@ public:
 			}
 			case '6':
 			{
-				this->updateCourseID();
+				char PK[6]; 
+				cout << "Enter PK to update: ";  cin >> PK;
+
+				if(this->updateCourseID(PK))
+					cout << "DONE!" << endl;
+				else
+					cout << "Course not found " << endl;
+					
 				break;
 			}
 			case '7':
@@ -963,7 +893,21 @@ public:
 			}
 			case '8':
 			{
-				this->state = false;
+				this->printKeys();
+				break;
+			}
+			case '9':
+			{
+				this->printAll();
+				break;
+			}
+			case 't':
+			{
+				trunc(this->recordsFile, this->recordsFileName);
+				trunc(this->primaryKeysFile, this->primaryKeysFileName);
+				trunc(this->secondaryKeysFile, this->secondaryKeysFileName);
+				trunc(this->secondaryKeysListFile, this->secondaryAvilList);
+				exit(0);
 				break;
 			}
 			default:
@@ -981,14 +925,17 @@ public:
 	{
 		trunc(this->primaryKeysFile, this->primaryKeysFileName);
 		trunc(this->secondaryKeysFile, this->secondaryKeysFileName);
+		trunc(this->secondaryKeysListFile, this->secondaryAvilList);
 
 		this->savePrimaryIndices();
 		this->saveSecondaryIndices();
+		this->saveSecondaryListIndices();
 		this->setStatusFlag(false);
 
 		this->recordsFile.close();
 		this->primaryKeysFile.close();
 		this->secondaryKeysFile.close();
+		this->secondaryKeysListFile.close();
 	}
 };
 
